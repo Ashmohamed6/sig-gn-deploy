@@ -1,0 +1,19 @@
+# env
+.env
+.env.*
+env.dev.local
+env.prod.local
+!.env.example
+!.env.prod.example
+!.env.dev.example
+
+# secrets / keys
+*.pem
+*.key
+
+# logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

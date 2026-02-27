@@ -1,0 +1,68 @@
+services:
+  db:
+    image: postgis/postgis:17-3.5
+    container_name: siggn_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sig_territoires_gn}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-sig_territoires_gn}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: ../sig-gn-backend
+    container_name: siggn_backend
+    env_file:
+      - ./env.dev
+      - ./env.dev.local
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ../sig-gn-backend:/app
+    ports:
+      - "8000:8000"
+    environment:
+      DB_HOST: db
+    command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+
+  frontend:
+    image: node:20-bookworm-slim
+    container_name: siggn_frontend
+    working_dir: /app
+    env_file:
+      - ./env.dev
+    depends_on:
+      - backend
+    environment:
+      CHOKIDAR_USEPOLLING: "1"
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_DISABLE_SWC_BINARY_DOWNLOAD: "1"
+      NEXT_DISABLE_SWC_WASM: "1"
+    volumes:
+      - ../sig-gn-frontend:/app
+    ports:
+      - "3001:3000"
+    command: >
+      sh -lc "
+        if [ ! -f /app/node_modules/next/dist/bin/next ]; then
+          echo '[frontend] node_modules local manquant. Lance npm install dans sig-gn-frontend sur l''hote.';
+          exit 1;
+        fi;
+        if [ ! -f /app/node_modules/@next/swc-linux-x64-gnu/package.json ]; then
+          echo '[frontend] @next/swc-linux-x64-gnu manquant. Lance: npm install --save-exact --force @next/swc-linux-x64-gnu@16.0.11 dans sig-gn-frontend sur l''hote.';
+          exit 1;
+        fi;
+        node /app/node_modules/next/dist/bin/next dev --webpack -H 0.0.0.0 -p 3000
+      "
+
+volumes:
+  pgdata:
